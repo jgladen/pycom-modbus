@@ -91,6 +91,8 @@ class Serial:
                 machine.idle()
             time.sleep_ms(1 + self.char_time_ms)
             self._ctrlPin(0)
+            time.sleep_ms(1 + self.char_time_ms)
+            self._uart.read()
 
         return self._validate_resp_hdr(self._uart_read(), slave_addr, modbus_pdu[0], count)
 
