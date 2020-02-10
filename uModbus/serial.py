@@ -12,7 +12,7 @@ import uModBus.const as Const
 from machine import UART
 from machine import Pin
 import struct
-import time
+import utime as time
 import machine
 
 class Serial:
@@ -25,6 +25,7 @@ class Serial:
         else:
             self._ctrlPin = None
         self.char_time_ms = (1000 * (data_bits + stop_bits + 2)) // baudrate
+        self.reply_timeout_ms = 1000
 
     def _calculate_crc16(self, data):
         crc = 0xFFFF
@@ -63,13 +64,30 @@ class Serial:
     def _uart_read(self):
         response = bytearray()
 
-        for x in range(1, 40):
-            if self._uart.any():
-                response.extend(self._uart.readall())
-                # variable length function codes may require multiple reads
-                if self._exit_read(response):
-                    break
-            time.sleep(0.05)
+        tickRead = time.ticks_ms()
+
+        machine.idle()
+        inBuffer = self._uart.any()
+
+        while not inBuffer:
+            if abs(time.ticks_diff(tickRead, time.ticks_ms())) > self.reply_timeout_ms:
+                print('nothing')
+                return response
+            machine.idle()
+            inBuffer = self._uart.any()
+
+        tickRead = time.ticks_ms()
+        while True:
+            if inBuffer:
+                chunk = self._uart.read(inBuffer)
+                if len(response) + len(chunk) > 240:
+                    raise OSError('RX Buffer Overflow')
+                response.extend(chunk)
+                tickRead = time.ticks_ms()
+            elif abs(time.ticks_diff(tickRead, time.ticks_ms())) >= self.char_time_ms*4:
+                break
+            machine.idle()
+            inBuffer = self._uart.any()
 
         return response
 
